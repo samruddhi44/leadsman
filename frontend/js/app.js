@@ -23,6 +23,18 @@ chips.forEach((chip) => {
   });
 });
 
+function showLoader(mode) {
+  const id = mode === "google_business" ? "gb-loader" : "sl-loader";
+  const el = document.getElementById(id);
+  if (el) el.style.display = "flex";
+}
+
+function hideLoader(mode) {
+  const id = mode === "google_business" ? "gb-loader" : "sl-loader";
+  const el = document.getElementById(id);
+  if (el) el.style.display = "none";
+}
+
 function startPolling(mode) {
   if (poller) clearInterval(poller);
 
@@ -36,9 +48,11 @@ function startPolling(mode) {
       if (!data.running) {
         clearInterval(poller);
         poller = null;
+        hideLoader(mode);
       }
     } catch (error) {
       console.error("Polling error:", error);
+      hideLoader(mode);
     }
   }, 1000);
 }
@@ -55,9 +69,7 @@ function updateUI(data, mode) {
   const percent = data.total > 0 ? (data.current / data.total) * 100 : 0;
   document.getElementById(`${prefix}-progress-fill`).style.width = `${percent}%`;
 
-  if (mode === "google_business") {
-    renderGoogleTable(data.results);
-  }
+  if (mode === "google_business") renderGoogleTable(data.results);
 
   if (mode === "social_lookup") {
     renderSocialTable(data.results);
@@ -126,10 +138,9 @@ function renderLink(url, label = "Open") {
   return `<a href="${url}" target="_blank">${label}</a>`;
 }
 
-
 function renderImage(url) {
   if (!url) return "";
-  return `<img class="thumb" src="${url}" alt="img" onerror="this.style.display='none'" />`;
+  return `<img class="thumb" src="${url}" alt="img" onerror="this.style.display='none';" />`;
 }
 
 async function postJSON(url, payload) {
@@ -145,6 +156,8 @@ document.getElementById("gb-search").addEventListener("click", async () => {
   const keywords = document.getElementById("gb-keywords").value;
   const locations = document.getElementById("gb-locations").value;
   const enable_email_scraping = document.getElementById("gb-email-scrape").checked;
+
+  showLoader("google_business");
 
   document.getElementById("gb-table-body").innerHTML =
     `<tr><td colspan="19" class="empty-state">Scraping started...</td></tr>`;
@@ -162,6 +175,8 @@ document.getElementById("sl-search").addEventListener("click", async () => {
   const keyword = document.getElementById("sl-keyword").value;
   const max_pages = Number(document.getElementById("sl-max-pages").value);
 
+  showLoader("social_lookup");
+
   document.getElementById("sl-table-body").innerHTML =
     `<tr><td colspan="8" class="empty-state">Scraping started...</td></tr>`;
 
@@ -176,10 +191,12 @@ document.getElementById("sl-search").addEventListener("click", async () => {
 
 document.getElementById("gb-stop").addEventListener("click", async () => {
   await postJSON("/api/stop", { mode: "google_business" });
+  hideLoader("google_business");
 });
 
 document.getElementById("sl-stop").addEventListener("click", async () => {
   await postJSON("/api/stop", { mode: "social_lookup" });
+  hideLoader("social_lookup");
 });
 
 document.getElementById("gb-export-csv").addEventListener("click", () => {

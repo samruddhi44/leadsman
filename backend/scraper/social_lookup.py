@@ -1,7 +1,5 @@
 from urllib.parse import quote
 
-from selenium.webdriver.common.by import By
-
 from backend.state import (
     add_log,
     add_result,
@@ -11,11 +9,13 @@ from backend.state import (
     set_total,
 )
 from backend.scraper.utils import (
-    build_driver,
+    start_browser,
+    close_browser,
     sleep_small,
     extract_emails_from_text,
     extract_phones_from_text,
     get_domain,
+    clean_text,
 )
 
 PLATFORM_DOMAINS = {
@@ -44,6 +44,8 @@ def is_valid_platform_link(href: str, domain: str) -> bool:
         "/search?",
         "/imgres?",
         "/aclk?",
+        "/policies/",
+        "/settings/",
     ]
 
     for item in blocked:
@@ -53,57 +55,72 @@ def is_valid_platform_link(href: str, domain: str) -> bool:
     if domain not in href_low:
         return False
 
-    return href.startswith("http")
+    if not href.startswith("http"):
+        return False
+
+    return True
 
 
-def clean_text(value: str) -> str:
-    if not value:
-        return ""
-
-    value = str(value)
-
-    replacements = {
-        "\u00a0": " ",
-        "\n": " ",
-        "\r": " ",
-        "\t": " ",
-        "": "",
-        "": "",
-        "": "",
-        "": "",
-    }
-
-    for old, new in replacements.items():
-        value = value.replace(old, new)
-
-    return value.strip()
-
-
-def collect_search_results(driver, domain):
-    anchors = driver.find_elements(By.CSS_SELECTOR, "a[href]")
+def collect_search_results(page, domain):
     results = []
     seen = set()
 
-    for a in anchors:
-        href = a.get_attribute("href") or ""
-        title = (a.text or "").strip()
+    try:
+        items = page.locator("div.yuRUbf > a").all()
 
-        if not is_valid_platform_link(href, domain):
-            continue
+        for el in items:
+            href = el.get_attribute("href") or ""
 
-        if href in seen:
-            continue
+            try:
+                title = el.locator("h3").inner_text()
+            except Exception:
+                title = href
 
-        if not title or len(title.strip()) < 3:
-            title = href
+            if not href:
+                continue
 
-        seen.add(href)
-        results.append((title, href))
+            if not is_valid_platform_link(href, domain):
+                continue
+
+            if href in seen:
+                continue
+
+            seen.add(href)
+            results.append((clean_text(title), clean_text(href)))
+
+    except Exception as e:
+        add_log("social_lookup", f"Search result parsing error: {e}")
+
+    if not results:
+        try:
+            items = page.locator("a[href]").all()
+
+            for el in items:
+                href = el.get_attribute("href") or ""
+
+                try:
+                    title = el.inner_text()
+                except Exception:
+                    title = href
+
+                if not href:
+                    continue
+
+                if not is_valid_platform_link(href, domain):
+                    continue
+
+                if href in seen:
+                    continue
+
+                seen.add(href)
+                results.append((clean_text(title), clean_text(href)))
+        except Exception:
+            pass
 
     return results[:20]
 
 
-def scan_profile_page(driver, keyword, platform, link, title):
+def scan_profile_page(page, keyword: str, location: str, platform: str, link: str, title: str) -> dict:
     row = {
         "title": clean_text(title),
         "domain": clean_text(get_domain(link)),
@@ -112,33 +129,39 @@ def scan_profile_page(driver, keyword, platform, link, title):
         "link": clean_text(link),
         "source": clean_text(platform),
         "category": clean_text(keyword),
-        "location": "",
+        "location": clean_text(location),
     }
 
     try:
-        driver.get(link)
-        sleep_small(2.5)
+        page.goto(link, wait_until="domcontentloaded", timeout=15000)
+        sleep_small(2)
 
-        text = driver.page_source.replace("\n", " ")
-        body_text = driver.find_element(By.TAG_NAME, "body").text
+        html = page.content()
+        body_text = ""
 
-        phones = extract_phones_from_text(text)
-        emails = extract_emails_from_text(text)
+        try:
+            body_text = page.locator("body").inner_text(timeout=5000)
+        except Exception:
+            body_text = ""
 
-        row["phones"] = clean_text(", ".join(phones))
-        row["emails"] = clean_text(", ".join(emails))
+        combined_text = f"{html} {body_text}"
 
-        lines = [x.strip() for x in body_text.split("\n") if x.strip()]
+        phones = extract_phones_from_text(combined_text)
+        emails = extract_emails_from_text(combined_text)
 
-        for line in lines[:80]:
-            low = line.lower()
-            if any(city_word in low for city_word in [
-                "mumbai", "delhi", "pune", "kolkata",
-                "bangalore", "hyderabad", "patna", "kolhapur",
-                "chennai", "nagpur", "nashik"
-            ]):
-                row["location"] = clean_text(line)
-                break
+        row["phones"] = clean_text(", ".join(phones[:3]))
+        row["emails"] = clean_text(", ".join(emails[:2]))
+
+        if not row["location"]:
+            lines = [x.strip() for x in body_text.split("\n") if x.strip()]
+            for line in lines[:100]:
+                low = line.lower()
+                if any(city in low for city in [
+                    "mumbai", "pune", "kolhapur", "delhi", "bangalore",
+                    "hyderabad", "nagpur", "nashik", "chennai", "patna"
+                ]):
+                    row["location"] = clean_text(line)
+                    break
 
     except Exception:
         pass
@@ -146,12 +169,19 @@ def scan_profile_page(driver, keyword, platform, link, title):
     return row
 
 
-def run_social_lookup_scrape(keyword, platforms, max_pages):
+def run_social_lookup_scrape(keyword: str, location: str, platforms: list[str], max_pages: int):
     mode = "social_lookup"
-    total_steps = len(platforms) * max_pages if platforms else 0
+
+    if not platforms:
+        add_log(mode, "No platforms selected")
+        set_total(mode, 0)
+        set_running(mode, False)
+        return
+
+    total_steps = len(platforms) * max_pages
     set_total(mode, total_steps)
 
-    driver = build_driver()
+    playwright, browser, context, page = start_browser(headless=True)
 
     try:
         for platform in platforms:
@@ -162,35 +192,31 @@ def run_social_lookup_scrape(keyword, platforms, max_pages):
                     add_log(mode, "Social lookup stopped safely")
                     break
 
-                add_log(mode, f'Navigating to page {page_num}/{max_pages} for "{keyword}" on {domain}')
+                query_text = f'{keyword} {location}'.strip()
+                add_log(mode, f'Navigating to page {page_num}/{max_pages} for "{query_text}" on {domain}')
 
-                query = quote(f'site:{domain} "{keyword}"')
+                query = quote(f'site:{domain} "{query_text}"')
                 start = (page_num - 1) * 10
-                url = f"https://www.google.com/search?q={query}&start={start}"
+                url = f"https://www.google.com/search?q={query}&start={start}&hl=en"
 
-                driver.get(url)
-                sleep_small(2.5)
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                    sleep_small(3)
+                except Exception as e:
+                    add_log(mode, f"Search page load failed: {e}")
+                    increment_current(mode)
+                    continue
 
-                results = collect_search_results(driver, domain)
-
-                add_log(mode, f"Found {len(results)} filtered links on {domain}")
+                results = collect_search_results(page, domain)
+                add_log(mode, f"Found {len(results)} candidate links on {domain}")
 
                 for title, href in results:
                     if is_stopped(mode):
                         break
 
-                    row = scan_profile_page(driver, keyword, platform, href, title)
+                    row = scan_profile_page(page, keyword, location, platform, href, title)
 
-                    if (
-                        row["domain"]
-                        and domain in row["domain"].lower()
-                        and (
-                            row["title"]
-                            or row["phones"]
-                            or row["emails"]
-                            or row["location"]
-                        )
-                    ):
+                    if row["title"] and row["domain"] and domain in row["domain"].lower():
                         add_result(mode, row)
 
                 increment_current(mode)
@@ -202,10 +228,6 @@ def run_social_lookup_scrape(keyword, platforms, max_pages):
         add_log(mode, f"Fatal Social Lookup scraper error: {exc}")
 
     finally:
-        try:
-            driver.quit()
-        except Exception:
-            pass
-
+        close_browser(playwright, browser)
         set_running(mode, False)
         add_log(mode, "Social Lookup scraping finished")

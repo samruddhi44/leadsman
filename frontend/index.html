@@ -6,7 +6,7 @@
   <title>LeadsMan</title>
   <link rel="stylesheet" href="/frontend/css/style.css" />
 </head>
-<body>
+<bo
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
@@ -63,9 +63,11 @@
               </div>
             </div>
           </div>
-
+          <div id="gb-loader" class="loader-wrap" style="display:none;">
           <div class="results-panel">
-            <div class="results-head">
+            <div class="results-head"><div class="loader-spinner"></div>
+            <span>Searching Google Business data...</span>
+          </div>
               <div class="progress-card">
                 <div class="progress-meta">
                   <span id="gb-progress-label">Progress (0/0)</span>
@@ -73,6 +75,15 @@
                   <span id="gb-results-label">Results (0)</span>
                 </div>
                 <div class="progress-bar">
+                  <div id="gb-loader" class="loader-box" style="display:none;">
+  <div class="spinner"></div>
+  <p>Searching Google Business data...</p>
+</div>
+
+<div id="sl-loader" class="loader-box" style="display:none;">
+  <div class="spinner"></div>
+  <p>Searching Social data...</p>
+</div>
                   <div id="gb-progress-fill" class="progress-fill"></div>
                 </div>
               </div>
@@ -116,11 +127,15 @@
         </div>
       </section>
 
-      <section id="social-lookup" class="page">
+      
+<section id="social-lookup" class="page">
         <div class="page-grid">
           <div class="control-panel">
+            <div id="gb-loader" class="loader-wrap" style="display:none;">
+              <div class="loader-spinner"></div>
+              <span>Searching Google Business data...</span>
+            </div>
             <h3>Social Lookup</h3>
-
             <label>Platform Filter</label>
             <div class="chip-group">
               <button class="chip active" data-platform="facebook">Facebook</button>

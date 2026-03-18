@@ -7,6 +7,7 @@ APP_STATE = {
         "current": 0,
         "total": 0,
         "results": [],
+        "last_results": [],
         "logs": [],
         "thread": None,
     },
@@ -16,6 +17,7 @@ APP_STATE = {
         "current": 0,
         "total": 0,
         "results": [],
+        "last_results": [],
         "logs": [],
         "thread": None,
     },
@@ -31,6 +33,7 @@ def reset_mode(mode: str):
         APP_STATE[mode]["current"] = 0
         APP_STATE[mode]["total"] = 0
         APP_STATE[mode]["results"] = []
+        APP_STATE[mode]["last_results"] = []
         APP_STATE[mode]["logs"] = []
         APP_STATE[mode]["thread"] = None
 
@@ -68,14 +71,23 @@ def increment_current(mode: str):
 def add_result(mode: str, row: dict):
     with STATE_LOCK:
         APP_STATE[mode]["results"].append(row)
+        APP_STATE[mode]["last_results"].append(row)
 
 
 def get_mode_state(mode: str):
     with STATE_LOCK:
+        results = list(APP_STATE[mode]["results"])
+        last_results = list(APP_STATE[mode]["last_results"])
+
+        # if current results become empty after finish, keep last successful data
+        if not results and last_results:
+            results = last_results
+
         return {
             "running": APP_STATE[mode]["running"],
+            "stop": APP_STATE[mode]["stop"],
             "current": APP_STATE[mode]["current"],
             "total": APP_STATE[mode]["total"],
-            "results": list(APP_STATE[mode]["results"]),
+            "results": results,
             "logs": list(APP_STATE[mode]["logs"]),
         }

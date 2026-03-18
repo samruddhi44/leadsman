@@ -2,56 +2,116 @@ import re
 import time
 from urllib.parse import urlparse
 
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+from playwright.sync_api import sync_playwright
 
 EMAIL_REGEX = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_REGEX = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
 PINCODE_REGEX = re.compile(r"\b\d{5,6}\b")
 
 
-def build_driver():
-    options = Options()
-    options.add_argument("--start-maximized")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--disable-notifications")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    return webdriver.Chrome(options=options)
+def start_browser(headless=True):
+    playwright = sync_playwright().start()
+    browser = playwright.chromium.launch(headless=headless)
+    context = browser.new_context()
+    page = context.new_page()
+    page.set_default_timeout(15000)
+    return playwright, browser, context, page
 
 
-def safe_text(element):
+def close_browser(playwright, browser):
     try:
-        return element.text.strip()
+        browser.close()
     except Exception:
-        return ""
+        pass
 
-
-def safe_attr(element, attr_name):
     try:
-        return element.get_attribute(attr_name) or ""
+        playwright.stop()
     except Exception:
-        return ""
+        pass
 
 
 def sleep_small(seconds=1.2):
     time.sleep(seconds)
 
 
-def extract_emails_from_text(text: str) -> list[str]:
+def clean_text(value):
+    if not value:
+        return ""
+
+    value = str(value)
+
+    replacements = {
+        "\u00a0": " ",
+        "\n": " ",
+        "\r": " ",
+        "\t": " ",
+        "": "",
+        "": "",
+        "": "",
+        "": "",
+    }
+
+    for old, new in replacements.items():
+        value = value.replace(old, new)
+
+    return value.strip()
+
+
+def clean_phone(value):
+    value = clean_text(value)
+    if not value:
+        return ""
+    value = re.sub(r"[^\d+\-\s()]", "", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    return value
+
+
+def clean_email(value):
+    value = clean_text(value).lower()
+    if not value:
+        return ""
+    match = EMAIL_REGEX.search(value)
+    return match.group(0) if match else ""
+
+
+def extract_emails_from_text(text: str):
     if not text:
         return []
-    return list(dict.fromkeys(EMAIL_REGEX.findall(text)))[:2]
+
+    emails = EMAIL_REGEX.findall(text)
+    cleaned = []
+
+    blocked_words = [
+        "example.com",
+        "your@email",
+        "test@test",
+        "wixpress.com",
+        "sentry.io",
+    ]
+
+    for email in emails:
+        e = email.strip().lower()
+        if any(bad in e for bad in blocked_words):
+            continue
+        if e not in cleaned:
+            cleaned.append(e)
+
+    return cleaned[:2]
 
 
-def extract_phones_from_text(text: str) -> list[str]:
+def extract_phones_from_text(text: str):
     if not text:
         return []
     found = [x.strip() for x in PHONE_REGEX.findall(text)]
-    return list(dict.fromkeys(found))[:3]
+    unique = []
+    for item in found:
+        item = clean_phone(item)
+        if item and item not in unique:
+            unique.append(item)
+    return unique[:3]
 
 
-def get_domain(url: str) -> str:
+def get_domain(url: str):
     try:
         return urlparse(url).netloc
     except Exception:
@@ -75,46 +135,43 @@ def parse_basic_location(address: str):
     return city, state, pincode
 
 
-def try_open_and_collect_emails(driver, website_url: str):
+def try_open_and_collect_emails(page, website_url: str):
     if not website_url:
         return "", ""
 
     emails = []
-    original = driver.current_window_handle
 
-    try:
-        driver.execute_script("window.open(arguments[0], '_blank');", website_url)
-        driver.switch_to.window(driver.window_handles[-1])
-        sleep_small(2)
+    pages_to_try = [website_url]
+    for suffix in ["/contact", "/contact-us", "/about", "/about-us"]:
+        if website_url.endswith("/"):
+            pages_to_try.append(website_url[:-1] + suffix)
+        else:
+            pages_to_try.append(website_url + suffix)
 
-        pages_to_try = [website_url]
-        for suffix in ["/contact", "/contact-us", "/about", "/about-us"]:
-            if website_url.endswith("/"):
-                pages_to_try.append(website_url[:-1] + suffix)
-            else:
-                pages_to_try.append(website_url + suffix)
-
-        for page in pages_to_try:
-            try:
-                driver.get(page)
-                sleep_small(2)
-                text = driver.page_source
-                emails.extend(extract_emails_from_text(text))
-                emails = list(dict.fromkeys(emails))
-                if len(emails) >= 2:
-                    break
-            except Exception:
-                continue
-
-    except Exception:
-        pass
-
-    finally:
+    for target in pages_to_try:
         try:
-            driver.close()
-            driver.switch_to.window(original)
+            temp = page.context.new_page()
+            temp.goto(target, wait_until="domcontentloaded", timeout=15000)
+            sleep_small(1.5)
+
+            text = temp.content()
+            found = extract_emails_from_text(text)
+
+            for e in found:
+                e = clean_email(e)
+                if e and e not in emails:
+                    emails.append(e)
+
+            temp.close()
+
+            if len(emails) >= 2:
+                break
         except Exception:
-            pass
+            try:
+                temp.close()
+            except Exception:
+                pass
+            continue
 
     emails = emails[:2]
 

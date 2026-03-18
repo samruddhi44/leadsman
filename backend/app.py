@@ -8,7 +8,14 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from backend.state import reset_mode, add_log, set_running, set_stop, get_mode_state, APP_STATE
+from backend.state import (
+    reset_mode,
+    add_log,
+    set_running,
+    set_stop,
+    get_mode_state,
+    APP_STATE,
+)
 from backend.export_utils import export_results
 from backend.scraper.google_business import run_google_business_scrape
 from backend.scraper.social_lookup import run_social_lookup_scrape
@@ -34,6 +41,7 @@ class GoogleBusinessRequest(BaseModel):
 
 class SocialLookupRequest(BaseModel):
     keyword: str
+    location: str = ""
     max_pages: int = 5
     platforms: List[str]
 
@@ -52,6 +60,7 @@ def start_google_business(payload: GoogleBusinessRequest):
     mode = "google_business"
     reset_mode(mode)
     set_running(mode, True)
+    set_stop(mode, False)
     add_log(mode, "Starting Google Business scraping...")
 
     thread = Thread(
@@ -70,11 +79,12 @@ def start_social_lookup(payload: SocialLookupRequest):
     mode = "social_lookup"
     reset_mode(mode)
     set_running(mode, True)
-    add_log(mode, "Ready to scrape social media...")
+    set_stop(mode, False)
+    add_log(mode, "Starting Social Lookup scraping...")
 
     thread = Thread(
         target=run_social_lookup_scrape,
-        args=(payload.keyword, payload.platforms, payload.max_pages),
+        args=(payload.keyword, payload.location, payload.platforms, payload.max_pages),
         daemon=True,
     )
     APP_STATE[mode]["thread"] = thread
