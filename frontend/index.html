@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description"
+    content="LeadsMan — Professional lead generation dashboard powered by Playwright browser automation. Scrape Google Business listings and social media profiles for business leads." />
+  <title>LeadsMan — Lead Generation Dashboard</title>
+  <link rel="stylesheet" href="/frontend/css/style.css" />
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>" />
+</head>
+
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>LeadsMan</h1>
+        <p>Lead Generation</p>
+      </div>
+      <nav class="side-nav">
+        <button class="nav-item active" data-page="google-business">Google Business</button>
+        <button class="nav-item" data-page="social-lookup">Social Lookup</button>
+        <button class="nav-item" data-page="user-guide">User Guide</button>
+        <button class="nav-item" data-page="about-extension">About</button>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div>
+          <h2>LeadsMan</h2>
+          <p></p>
+        </div>
+        <div class="topbar-badge"> </div>
+      </header>
+
+      <!-- GOOGLE BUSINESS -->
+      <section id="google-business" class="page active-page">
+        <div class="page-grid">
+          <div class="control-panel">
+            <h3>Google Business Leads</h3>
+
+            <label>Keywords</label>
+            <textarea id="gb-keywords" placeholder="schools, colleges, hospitals"></textarea>
+
+            <label>Locations</label>
+            <textarea id="gb-locations" placeholder="Kolhapur, Pune, Mumbai"></textarea>
+
+            <label>Max Pages</label>
+            <input type="number" id="gb-max-pages" value="0" min="0" max="10" />
+
+            <div class="toggle-row">
+              <label class="switch">
+                <input type="checkbox" id="gb-email-scrape" />
+                <span class="slider"></span>
+              </label>
+              <span>Enable Email Scraping</span>
+            </div>
+
+            <div class="button-stack">
+              <button id="gb-search" class="btn btn-dark">Search</button>
+              <button id="gb-stop" class="btn btn-danger" disabled>Stop</button>
+
+              <div class="dropdown-wrap">
+                <button class="btn btn-dark dropdown-btn">Download</button>
+                <div class="dropdown-menu">
+                  <button id="gb-export-csv">Export CSV</button>
+                  <button id="gb-export-xlsx">Export Excel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="results-panel">
+            <div id="gb-loader-box" class="loader-box" style="display:none;">
+              <div class="spinner"></div>
+              <span>Searching Google Business data...</span>
+            </div>
+
+            <div class="results-head">
+              <div class="progress-card">
+                <div class="progress-meta">
+                  <span id="gb-progress-label">Progress (0/0)</span>
+                  <span>|</span>
+                  <span id="gb-results-label">Results (0)</span>
+                </div>
+                <div class="progress-bar">
+                  <div id="gb-progress-fill" class="progress-fill"></div>
+                </div>
+                <div id="gb-status-text" class="status-text">Ready to scrape Google Business data.</div>
+              </div>
+
+              <div class="log-panel">
+                <button class="log-toggle" id="gb-log-toggle">Live Logs</button>
+                <div class="log-content" id="gb-log-content">
+                  <div class="log-entries" id="gb-log-entries"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="table-shell">
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Business</th>
+                      <th>Location</th>
+                      <th>Map Link</th>
+                      <th>Address</th>
+                      <th>Email</th>
+                      <th>Featured Image</th>
+                      <th>Pin Code</th>
+                    </tr>
+                  </thead>
+                  <tbody id="gb-table-body">
+                    <tr>
+                      <td colspan="7" class="empty-state">Enter keyword and location to start extraction.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SOCIAL LOOKUP -->
+      <section id="social-lookup" class="page">
+        <div class="page-grid">
+          <div class="control-panel">
+            <h3>Social Lookup</h3>
+
+            <label>Platform Filter</label>
+            <div class="chip-group">
+              <button class="chip active" data-platform="facebook">Facebook</button>
+              <button class="chip active" data-platform="instagram">Instagram</button>
+              <button class="chip active" data-platform="linkedin">LinkedIn</button>
+              <button class="chip active" data-platform="youtube">YouTube</button>
+            </div>
+
+            <label>Keyword</label>
+            <input type="text" id="sl-keyword" placeholder="cake shops, schools, cafes" />
+
+            <label>Location</label>
+            <input type="text" id="sl-location" placeholder="Kolhapur, Pune" />
+
+            <label>Max Pages</label>
+            <input type="number" id="sl-max-pages" value="3" min="1" max="3" />
+
+            <div class="button-stack">
+              <button id="sl-search" class="btn btn-dark">Search</button>
+              <button id="sl-stop" class="btn btn-danger" disabled>Stop</button>
+
+              <div class="dropdown-wrap">
+                <button class="btn btn-dark dropdown-btn">Download</button>
+                <div class="dropdown-menu">
+                  <button id="sl-export-csv">Export CSV</button>
+                  <button id="sl-export-xlsx">Export Excel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="results-panel">
+            <div id="sl-loader-box" class="loader-box" style="display:none;">
+              <div class="spinner"></div>
+              <span>Searching selected social platforms...</span>
+            </div>
+
+            <div class="results-head">
+              <div class="progress-card">
+                <div class="progress-meta">
+                  <span id="sl-progress-label">Progress (0/0)</span>
+                  <span>|</span>
+                  <span id="sl-results-label">Results (0)</span>
+                </div>
+                <div class="progress-bar">
+                  <div id="sl-progress-fill" class="progress-fill"></div>
+                </div>
+                <div id="sl-status-text" class="status-text">Ready to scrape selected social platforms.</div>
+              </div>
+
+              <div class="log-panel">
+                <button class="log-toggle" id="sl-log-toggle">▶ Live Logs</button>
+                <div class="log-content" id="sl-log-content">
+                  <div class="log-entries" id="sl-log-entries"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="table-shell">
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Profile Name / Title</th>
+                      <th>Platform</th>
+                      <th>Profile Link</th>
+                      <th>Bio / Description</th>
+                      <th>Followers</th>
+                      <th>Contact Info</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sl-table-body">
+                    <tr>
+                      <td colspan="6" class="empty-state">Select platform and enter keyword to start scraping.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- USER GUIDE -->
+      <section id="user-guide" class="page simple-page">
+        <div class="info-card">
+          <h3>User Guide</h3>
+          <p>1. Open Google Business or Social Lookup.</p>
+          <p>2. Enter your input values.</p>
+          <p>3. Click Search.</p>
+          <p>4. Watch live progress and logs update in real time.</p>
+          <p>5. Click Stop any time to stop safely without losing visible results.</p>
+          <p>6. Use Download to export CSV or Excel.</p>
+        </div>
+      </section>
+
+      <!-- ABOUT -->
+      <section id="about-extension" class="page simple-page">
+        <div class="info-card">
+          <h3>About LeadsMan</h3>
+          <p>LeadsMan is a Playwright-based scraping dashboard built without external APIs. It uses browser automation
+            to collect lead data from Google Business listings and public social media profiles.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/frontend/js/app.js"></script>
+</body>
+
+</html>
